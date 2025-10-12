@@ -1,0 +1,13 @@
+线性模型：
+    example: y_hat=x*w+b
+    data:  x  y
+           1  2
+           2  4
+           3  6
+           4  ?
+    easier:y_hat=x*w
+    first:randamly seltct a  w
+    second:define loss and calculate loss   一个样本的Loss=(y_hat-y)**2=(x*w-y)**2
+    平均平方误差 MSE cost=∑(yn_hat-yn)**2
+    third:optimisim使得mean_Loss min 
+
