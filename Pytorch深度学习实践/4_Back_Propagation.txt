@@ -1,0 +1,2 @@
+反向传播：
+    正向forward记录计算图，反向梯度计算backward
