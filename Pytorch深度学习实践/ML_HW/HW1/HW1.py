@@ -36,7 +36,6 @@ high_corr_features = target_corr[(target_corr > threshold) & (target_corr.index 
 
 # 合并前40列one-hot + 高相关特征
 selected_cols = list(data_tr.columns[:40]) + high_corr_features
-print(selected_cols)
 # 构造新数据集并保存
 df_selected = data_tr[selected_cols + [target_name]]
 df_selected.to_csv('covid_selected.csv', index=False)
