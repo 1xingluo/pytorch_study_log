@@ -1,0 +1,59 @@
+1.制作数据转换，包括train_trf,test_trf
+2.制作数据集：train_set,test_set并DataLoader
+3.构建网络架构
+4.loss,optim,epochs,device配置
+5.训练
+6.验证
+7.测试
+
+
+加入semi-supervised-learning
+
+半监督伪标签阶段，伪标签可能不准确，梯度可能异常。nn.utils.clip_grad_norm_(model.parameters(), max_norm=10)
+
+
+class PseudoDataset(Dataset):
+    def __init__(self, images, labels, transform=None):
+        self.images = images
+        self.labels = labels
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx):
+        img_path = self.images[idx]
+        img = Image.open(img_path).convert("RGB")  # ⚠ 转为 PIL.Image
+        label = self.labels[idx]
+        if self.transform:
+            img = self.transform(img)
+        return img, label
+
+def get_pseudo_labels(dataset, model, batch_size=64, threshold=0.65):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model.eval()
+    softmax = nn.Softmax(dim=-1)
+
+    pseudo_images = []
+    pseudo_labels = []
+
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+    for batch_idx, (imgs, _) in enumerate(tqdm(dataloader, desc="Pseudo-labeling")):
+        imgs = imgs.to(device)
+        with torch.no_grad():
+            logits = model(imgs)
+            probs = softmax(logits)
+        confs, preds = probs.max(dim=-1)
+        for i in range(len(imgs)):
+            if confs[i] >= threshold:
+                pseudo_images.append(dataset.samples[batch_idx*batch_size + i][0])
+                pseudo_labels.append(preds[i].item())
+    model.train()
+    return PseudoDataset(pseudo_images, pseudo_labels, transform=dataset.transform)
+
+ if do_semi:
+        print(f"\n[Epoch {epoch+1}] Generating pseudo labels...")
+        pseudo_set = get_pseudo_labels(unlabeled_set, model)
+        concat_dataset = ConcatDataset([train_set, pseudo_set])
+        train_loader = DataLoader(concat_dataset, batch_size=batch_size, shuffle=True, pin_memory=True)
+        print(f"Semi-supervised dataset size: {len(concat_dataset)}")

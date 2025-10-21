@@ -78,8 +78,6 @@ for train_idx, val_idx in splitter.split(train, train_label):
 
 train_set = TIMITDataset(train_x, train_y)
 val_set = TIMITDataset(val_x, val_y)
-train_loader = DataLoader(train_set, batch_size=256, shuffle=True)
-val_loader = DataLoader(val_set, batch_size=256, shuffle=False)
 
 # DataLoader
 BATCH_SIZE = 256
