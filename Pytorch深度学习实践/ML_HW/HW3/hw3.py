@@ -57,23 +57,43 @@ class PseudoDataset(Dataset):
         return img, label
 
 def get_pseudo_labels(dataset, model, batch_size=64, threshold=0.8, device="cpu"):
+    """
+    关键改动：
+    - 推理阶段临时把 dataset.transform 切到 test_tfm（弱增广），筛出高置信样本；
+    - 返回的 PseudoDataset 用 train_tfm（强增广）参与训练。
+    """
     model.eval()
     softmax = nn.Softmax(dim=-1)
     pseudo_images, pseudo_labels = [], []
 
+    # ---- 临时把无标签数据集切到“弱增广视图”做推理 ----
+    old_transform = dataset.transform
+    dataset.transform = test_tfm
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
-    for batch_idx, (imgs, _) in enumerate(tqdm(dataloader, desc="Pseudo-labeling")):
-        imgs = imgs.to(device)
-        with torch.no_grad():
+
+    processed = 0
+    with torch.no_grad():
+        for (imgs, _) in tqdm(dataloader, desc="Pseudo-labeling (weak aug)"):
+            imgs = imgs.to(device)
             logits = model(imgs)
             probs = softmax(logits)
-        confs, preds = probs.max(dim=-1)
-        for i in range(len(imgs)):
-            if confs[i] >= threshold:
-                pseudo_images.append(dataset.samples[batch_idx * batch_size + i][0])
-                pseudo_labels.append(preds[i].item())
+            confs, preds = probs.max(dim=-1)
+
+            bs = imgs.size(0)
+            for i in range(bs):
+                if confs[i].item() >= threshold:
+                    # 用原始 dataset 的文件路径（DatasetFolder: dataset.samples[idx][0]）
+                    idx = processed + i
+                    pseudo_images.append(dataset.samples[idx][0])
+                    pseudo_labels.append(preds[i].item())
+            processed += bs
+
+    # 还原 transform，避免影响后续使用
+    dataset.transform = old_transform
     model.train()
-    return PseudoDataset(pseudo_images, pseudo_labels, transform=dataset.transform)
+
+    # ---- 训练阶段对伪标签样本使用强增广 ----
+    return PseudoDataset(pseudo_images, pseudo_labels, transform=train_tfm)
 
 # ============================================================
 # ResNet18 分类模型
@@ -100,14 +120,17 @@ if __name__ == "__main__":
 
     batch_size = 64
 
+    # 仅此处小修：extensions 必须是元组，而不是字符串
+    exts = ('.jpg', '.jpeg', '.png')
+
     train_set = DatasetFolder(train_dir, loader=lambda x: Image.open(x).convert("RGB"),
-                              extensions="jpg", transform=train_tfm)
+                              extensions=exts, transform=train_tfm)
     valid_set = DatasetFolder(valid_dir, loader=lambda x: Image.open(x).convert("RGB"),
-                              extensions="jpg", transform=test_tfm)
+                              extensions=exts, transform=test_tfm)
     unlabeled_set = DatasetFolder(unlabeled_dir, loader=lambda x: Image.open(x).convert("RGB"),
-                                  extensions="jpg", transform=train_tfm)
+                                  extensions=exts, transform=train_tfm)  # 训练时仍用强增广
     test_set = DatasetFolder(test_dir, loader=lambda x: Image.open(x).convert("RGB"),
-                             extensions="jpg", transform=test_tfm)
+                             extensions=exts, transform=test_tfm)
 
     train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=0)
     valid_loader = DataLoader(valid_set, batch_size=512, shuffle=False, pin_memory=True, num_workers=0)
@@ -128,7 +151,7 @@ if __name__ == "__main__":
     save_path = "best_model.pth"
 
     # -------------------- 早停参数 --------------------
-    early_stop_patience = 15  # 验证集连续多少轮没有提升就停止
+    early_stop_patience = 30  # 验证集连续多少轮没有提升就停止
     epochs_no_improve = 0
 
     # Cosine Annealing + Warmup 调度器
@@ -192,8 +215,8 @@ if __name__ == "__main__":
 
         # -------------------- 半监督伪标签（每 N 轮） --------------------
         if do_semi and ((epoch + 1) % pseudo_label_interval == 0):
-            print(f"\n[Epoch {epoch+1}] Generating pseudo labels...")
-            pseudo_set = get_pseudo_labels(unlabeled_set, model, device=device)
+            print(f"\n[Epoch {epoch+1}] Generating pseudo labels (weak aug infer, strong aug train)...")
+            pseudo_set = get_pseudo_labels(unlabeled_set, model, batch_size=batch_size, threshold=0.8, device=device)
             concat_dataset = ConcatDataset([train_set, pseudo_set])
             train_loader = DataLoader(concat_dataset, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=0)
             print(f"Semi-supervised dataset size: {len(concat_dataset)}")
@@ -204,7 +227,7 @@ if __name__ == "__main__":
         print(f"→ Learning rate after scheduler: {current_lr:.6f}")
 
     # -------------------- 测试集预测 --------------------
-    model.load_state_dict(torch.load(save_path))
+    model.load_state_dict(torch.load(save_path, map_location=device))
     model.eval()
     predictions = []
     for imgs, _ in tqdm(test_loader, desc="Testing"):
