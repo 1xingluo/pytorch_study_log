@@ -107,7 +107,7 @@ def get_dataloader(data_dir, batch_size, n_workers):
     shuffle=True,
     drop_last=True,
     num_workers=n_workers,
-    pin_memory=True,
+    pin_memory=False,
     collate_fn=collate_batch,
   )
   valid_loader = DataLoader(
@@ -115,100 +115,121 @@ def get_dataloader(data_dir, batch_size, n_workers):
     batch_size=batch_size,
     num_workers=n_workers,
     drop_last=True,
-    pin_memory=True,
+    pin_memory=False,
     collate_fn=collate_batch,
   )
 
   return train_loader, valid_loader, speaker_num
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
-
-# -----------------------
-# ✅ 定义一个简单 ConformerBlock
-# -----------------------
-class ConformerBlock(nn.Module):
-    def __init__(self, d_model, nhead=1, ff_dim=256, dropout=0.1):
+# --------- 前馈层 ---------
+class FeedForward(nn.Module):
+    def __init__(self, dim, mult=4, dropout=0.1):
         super().__init__()
-        # 前馈模块
-        self.ffn1 = nn.Sequential(
-            nn.LayerNorm(d_model),
-            nn.Linear(d_model, ff_dim),
-            nn.ReLU(),
+        self.net = nn.Sequential(
+            nn.LayerNorm(dim),
+            nn.Linear(dim, dim * mult),
+            nn.GELU(),
             nn.Dropout(dropout),
-            nn.Linear(ff_dim, d_model),
-            nn.Dropout(dropout),
+            nn.Linear(dim * mult, dim),
+            nn.Dropout(dropout)
         )
-
-        # 多头注意力
-        self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
-        self.norm1 = nn.LayerNorm(d_model)
-        self.dropout1 = nn.Dropout(dropout)
-
-        # 卷积模块
-        self.conv = nn.Sequential(
-            nn.Conv1d(d_model, 2 * d_model, kernel_size=1),
-            nn.GLU(dim=1),  # 门控线性单元
-            nn.Conv1d(d_model, d_model, kernel_size=3, padding=1, groups=d_model),
-            nn.BatchNorm1d(d_model),
-            nn.ReLU(),
-            nn.Conv1d(d_model, d_model, kernel_size=1),
-            nn.Dropout(dropout),
-        )
-
-        # 第二个前馈模块
-        self.ffn2 = nn.Sequential(
-            nn.LayerNorm(d_model),
-            nn.Linear(d_model, ff_dim),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(ff_dim, d_model),
-            nn.Dropout(dropout),
-        )
-
-        self.norm_final = nn.LayerNorm(d_model)
 
     def forward(self, x):
-        # x: (L, B, D)
-        # Feed Forward 1
-        x = x + 0.5 * self.ffn1(x)
-        # Self-Attention
-        attn_out, _ = self.self_attn(self.norm1(x), self.norm1(x), self.norm1(x))
-        x = x + self.dropout1(attn_out)
-        # Convolution
-        conv_in = x.permute(1, 2, 0)  # (B, D, L)
-        conv_out = self.conv(conv_in).permute(2, 0, 1)  # (L, B, D)
-        x = x + conv_out
-        # Feed Forward 2
-        x = x + 0.5 * self.ffn2(x)
-        return self.norm_final(x)
+        return self.net(x)
+
+# --------- 卷积模块 ---------
+class ConformerConvModule(nn.Module):
+    def __init__(self, dim, expansion_factor=2, kernel_size=31, dropout=0.1):
+        super().__init__()
+        self.layer_norm = nn.LayerNorm(dim)
+        self.pointwise1 = nn.Linear(dim, dim * expansion_factor)
+        self.glu = nn.GLU(dim=-1)  # 门控线性单元
+        self.depthwise_conv = nn.Conv1d(dim, dim, kernel_size, padding=kernel_size//2, groups=dim)
+        self.batch_norm = nn.BatchNorm1d(dim)
+        self.swish = nn.SiLU()  # 激活函数
+        self.pointwise2 = nn.Linear(dim, dim)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        # x: [seq_len, batch, dim]
+        x = self.layer_norm(x)
+        x = self.pointwise1(x)
+        x = self.glu(x)
+        # 转为 (batch, dim, seq_len) 方便 Conv1d
+        x = x.transpose(0, 1).transpose(1, 2)
+        x = self.depthwise_conv(x)
+        x = self.batch_norm(x)
+        x = self.swish(x)
+        x = x.transpose(1, 2).transpose(0, 1)
+        x = self.pointwise2(x)
+        x = self.dropout(x)
+        return x
+# --------- ConformerBlock ---------
+class ConformerBlock(nn.Module):
+    def __init__(self, dim, ff_mult=4, heads=2, conv_expansion=2,
+                 conv_kernel=31, attn_dropout=0.1, ff_dropout=0.1, conv_dropout=0.1):
+        super().__init__()
+        self.ff1 = FeedForward(dim, mult=ff_mult, dropout=ff_dropout)
+        self.attn = nn.MultiheadAttention(dim, num_heads=heads, dropout=attn_dropout)
+        self.conv = ConformerConvModule(dim, expansion_factor=conv_expansion,
+                                        kernel_size=conv_kernel, dropout=conv_dropout)
+        self.ff2 = FeedForward(dim, mult=ff_mult, dropout=ff_dropout)
+        self.norm = nn.LayerNorm(dim)
+
+    def forward(self, x):
+        # x: [seq_len, batch, dim]
+        x = x + 0.5 * self.ff1(x)      # 前馈层1
+        x = x + self.attn(x, x, x)[0]  # 自注意力
+        x = x + self.conv(x)           # 卷积模块
+        x = x + 0.5 * self.ff2(x)      # 前馈层2
+        x = self.norm(x)
+        return x
 
 
 # -----------------------
-# ✅ 替换后的 Classifier
+# Classifier
 # -----------------------
 class Classifier(nn.Module):
-    def __init__(self, d_model=60, n_spks=600, dropout=0.1):
+    def __init__(self, d_model=128, n_spks=600, dropout=0.1):
         super().__init__()
         self.prenet = nn.Linear(40, d_model)
 
-        # ✅ 使用 Conformer 替换 Transformer
-        self.encoder_layer = ConformerBlock(d_model=d_model, ff_dim=256, nhead=1, dropout=dropout)
-        # 如果想堆叠多层：
-        # self.encoder = nn.ModuleList([ConformerBlock(d_model) for _ in range(2)])
-
-        self.pred_layer = nn.Sequential(
-            nn.Linear(d_model, n_spks),
+        # 使用 ConformerBlock 替换 Transformer
+        self.encoder_layer = ConformerBlock(
+            dim=d_model,
+            ff_mult=4,        # 前馈层扩展倍数
+            heads=4,          # 注意力头数
+            conv_expansion=2,
+            conv_kernel=31,
+            attn_dropout=dropout,
+            ff_dropout=dropout,
+            conv_dropout=dropout
         )
+
+        # 如果要堆叠多层 Conformer
+        # self.encoder = nn.ModuleList([ConformerBlock(dim=d_model, ff_mult=4, heads=1) for _ in range(2)])
+
+        self.pred_layer = nn.Linear(d_model, n_spks)
 
     def forward(self, mels):
         # mels: (batch, len, 40)
-        out = self.prenet(mels)  # (B, L, D)
-        out = out.permute(1, 0, 2)  # (L, B, D)
-        out = self.encoder_layer(out)
-        out = out.transpose(0, 1)  # (B, L, D)
-        stats = out.mean(dim=1)  # mean pooling
-        out = self.pred_layer(stats)
+        out = self.prenet(mels)        # (B, L, D)
+        out = out.permute(1, 0, 2)     # (L, B, D)
+        out = self.encoder_layer(out)  # (L, B, D)
+
+        # 如果堆叠多层
+        # for layer in self.encoder:
+        #     out = layer(out)
+
+        out = out.transpose(0, 1)      # (B, L, D)
+        stats = out.mean(dim=1)        # mean pooling
+        out = self.pred_layer(stats)   # (B, n_spks)
         return out
+
 
 
 
