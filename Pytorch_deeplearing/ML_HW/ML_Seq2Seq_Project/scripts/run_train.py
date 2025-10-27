@@ -144,22 +144,21 @@ try_load_checkpoint(model, optimizer, name=resume, logger=logger)
 # -----------------------------
 # 训练循环
 # -----------------------------
-while epoch_itr.next_epoch_idx <= max_epoch:
-    train_one_epoch(
-        epoch_itr, model, task, criterion, optimizer, accum_steps,
-        device=device, logger=logger, config=None, use_wandb=use_wandb
-    )
+# while epoch_itr.next_epoch_idx <= max_epoch:
+#     train_one_epoch(
+#         epoch_itr, model, task, criterion, optimizer, accum_steps,
+#         device=device, logger=logger, config=None, use_wandb=use_wandb
+#     )
     
-    validate_and_save(
-        model, task, criterion, optimizer, epoch=epoch_itr.epoch,
-        logger=logger, device=device, utils=utils,
-        load_data_iterator_fn=load_data_iterator,
-        max_tokens=max_tokens, num_workers=num_workers,
-        target_lang=target_lang, use_wandb=use_wandb
-    )
+#     validate_and_save(
+#         model, task, criterion, optimizer, epoch=epoch_itr.epoch,
+#         logger=logger, device=device, utils=utils,
+#         load_data_iterator_fn=load_data_iterator,
+#         max_tokens=max_tokens, num_workers=num_workers,
+#         target_lang=target_lang, use_wandb=use_wandb
+#     )
     
-    logger.info("end of epoch {}".format(epoch_itr.epoch))
+#     logger.info("end of epoch {}".format(epoch_itr.epoch))
     
-    # 构建下一轮 epoch 的迭代器
-    epoch_itr = load_data_iterator(task, "train", epoch_itr.next_epoch_idx)
-
+#     # 构建下一轮 epoch 的迭代器
+#     epoch_itr = load_data_iterator(task, "train", epoch_itr.next_epoch_idx)
