@@ -4,16 +4,13 @@ import tqdm
 import numpy as np
 import sacrebleu
 from argparse import Namespace
+from fairseq import utils
 
 def validate(model, task, criterion, logger=None, device='cuda', utils=None,
              load_data_iterator_fn=None, max_tokens=4000, num_workers=0,
              target_lang='zh', use_wandb=False, beam=5, max_len_a=1.2, max_len_b=10):
     """
-    Validation 流程，支持 beam search。
-    model: nn.Module
-    task: fairseq translation task
-    criterion: loss function
-    load_data_iterator_fn: 返回 batch iterator 的函数
+    Validation 流程，支持 beam search，兼容 Fairseq 0.10
     """
 
     if logger: logger.info('begin validation')
@@ -65,22 +62,27 @@ def validate(model, task, criterion, logger=None, device='cuda', utils=None,
             # ------------------------------------------
 
             # ---------------- beam search 生成 ----------------
-            # 新版 Fairseq 推荐用 task.inference_step
             translations = task.inference_step(sequence_generator, [model], sample)
 
             for i, t in enumerate(translations):
                 hyp_tokens = t[0]["tokens"].int().cpu()  # beam 最优序列
-                hyp_str = task.target_dictionary.string(hyp_tokens, skip_special_tokens=True)
+
+                # --- 去掉 pad、eos、unk ---
+                hyp_tokens = utils.strip_pad(hyp_tokens, task.target_dictionary.pad())
+                hyp_tokens = torch.tensor([t for t in hyp_tokens if t not in 
+                                           (task.target_dictionary.eos(), task.target_dictionary.unk())])
+                # -----------------------------
+
+                hyp_str = task.target_dictionary.string(hyp_tokens)
 
                 src_tokens = sample["net_input"]["src_tokens"][i]
                 tgt_tokens = sample["target"][i]
 
-                src_str = task.source_dictionary.string(
-                    utils.strip_pad(src_tokens, task.source_dictionary.pad())
-                )
-                ref_str = task.target_dictionary.string(
-                    utils.strip_pad(tgt_tokens, task.target_dictionary.pad())
-                )
+                src_tokens = utils.strip_pad(src_tokens, task.source_dictionary.pad())
+                ref_tokens = utils.strip_pad(tgt_tokens, task.target_dictionary.pad())
+
+                src_str = task.source_dictionary.string(src_tokens)
+                ref_str = task.target_dictionary.string(ref_tokens)
 
                 srcs.append(src_str)
                 hyps.append(hyp_str)

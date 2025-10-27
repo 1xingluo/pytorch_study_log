@@ -53,3 +53,5 @@ clip_norm = 1.0
 # source / target languages
 source_lang = 'en'
 target_lang = 'zh'
+# 新增 clip_norm
+clip_norm = 1.0

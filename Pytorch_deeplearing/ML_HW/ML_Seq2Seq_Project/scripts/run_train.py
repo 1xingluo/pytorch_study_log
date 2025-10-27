@@ -163,14 +163,3 @@ while epoch_itr.next_epoch_idx <= max_epoch:
     # 构建下一轮 epoch 的迭代器
     epoch_itr = load_data_iterator(task, "train", epoch_itr.next_epoch_idx)
 
-# -----------------------------
-# 平均 checkpoint
-# -----------------------------
-checkdir = Path(savedir).absolute()
-avg_checkpoint = checkdir / "avg_last_5_checkpoint.pt"
-os.system(
-    f'python "{Path("fairseq/scripts/average_checkpoints.py")}" '
-    f'--inputs "{checkdir}" '
-    f'--num-epoch-checkpoints 5 '
-    f'--output "{avg_checkpoint}"'
-)
