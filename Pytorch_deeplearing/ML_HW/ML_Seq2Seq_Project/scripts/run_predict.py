@@ -31,8 +31,8 @@ config = Config()
 # -----------------------------
 # 加载最后一次 checkpoint
 # -----------------------------
-print("📌 Loading last checkpoint...")
-try_load_checkpoint(model, name="checkpoint_last.pt")
+print("📌 Loading best checkpoint...")
+try_load_checkpoint(model, name="checkpoint_best.pt")
 
 # -----------------------------
 # 验证模型
