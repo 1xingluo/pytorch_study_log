@@ -1,0 +1,15 @@
+分类：例如MNIST DataSet(手写数字识别)
+import torchvision
+
+train_set=torchvision.datasets.MNIST(root='../dataset/minist',train=True,download=True)
+test_set=torchvision.datasets.MNIST(root='../dataset/minist',train=False,download=True)
+只有两个分类的问题是二分类问题：
+x  y
+1  0
+2  0
+3  1
+4  ?
+（输出为概率属于0,1）. use y'=Sigmoid(y)
+y_hat=sigmoid(w*x+b)
+loss使用交叉熵
+loss=-logyi_hat

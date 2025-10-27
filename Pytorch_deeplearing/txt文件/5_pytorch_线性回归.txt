@@ -1,0 +1,24 @@
+1.数据集：x_data,y_data,设计成张量
+2.构建模型 Linear Unit 需要确定x,y_hat的维度 
+3.构建loss和optimization
+4.训练 Train:1.前向计算 2.计算loss 3.梯度清零 4.反向传播 5.梯度更新
+python类的实例：
+    class Person:
+    # 初始化方法（构造函数）
+    def __init__(self, name, age):
+        self.name = name  # 实例属性
+        self.age = age
+
+    # 实例方法
+    def say_hello(self):
+        print(f"你好，我是 {self.name}，今年 {self.age} 岁。")
+子类：
+    class Animal:
+        def __init__(self, name):
+            self.name = name
+
+    class Dog(Animal):
+        def __init__(self, name, color):
+            super().__init__(name)  # 调用父类构造函数
+            self.color = color
+

@@ -1,0 +1,16 @@
+梯度下降算法：
+优化问题： 利用计算梯度不断更新（w,b）w=w-learning_rate*(偏cost/偏w)
+                                   b=b-learning_rate*(偏cost/偏b)
+(只能找到局部最优解。存在local minima 问题)
+但是一般没有这么多local minima
+对于鞍点，g=0。到达这个位置无法Update
+要解决的问题其实不是局部最优问题，而是鞍点
+例子：y_hat = x*w 
+偏cost/偏w=1/N ∑2*xn*(xn*w-yn)
+Updata:w=w-α/N*∑2*xn*(xn*w-yn)
+
+
+常使用随机梯度下降：单个loss求偏导：
+gradient=单个loss对w求偏导：
+w=w-α偏L/偏w
+w=w-α*2*xn*(y_hat-yn)

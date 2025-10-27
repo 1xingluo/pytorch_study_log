@@ -1,0 +1,6 @@
+多维输入：
+input：[x],output:[y]
+[x]:[[x1,x2,...x8],[x1',x2',...x8']]
+[y]:[[y1],[y2],[y3]]
+y_hat=actfn(∑x(n*wn+b))
+
