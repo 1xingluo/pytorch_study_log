@@ -147,7 +147,7 @@ plt.show()
 
 # Training hyperparameters
 batch_size = 64
-z_dim = 100
+z_dim = 128
 z_sample = Variable(torch.randn(100, z_dim)).cuda()
 lr = 5e-5
 
@@ -185,110 +185,110 @@ dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_worker
 
 
 steps = 0
-for e, epoch in enumerate(range(n_epoch)):
-    progress_bar = qqdm(dataloader)
-    for i, data in enumerate(progress_bar):
-        imgs = data
-        imgs = imgs.cuda()
+# for e, epoch in enumerate(range(n_epoch)):
+#     progress_bar = qqdm(dataloader)
+#     for i, data in enumerate(progress_bar):
+#         imgs = data
+#         imgs = imgs.cuda()
 
-        bs = imgs.size(0)
+#         bs = imgs.size(0)
 
-        # ============================================
-        #  Train D
-        # ============================================
-        z = Variable(torch.randn(bs, z_dim)).cuda()
-        r_imgs = Variable(imgs).cuda()
-        f_imgs = G(z)
+#         # ============================================
+#         #  Train D
+#         # ============================================
+#         z = Variable(torch.randn(bs, z_dim)).cuda()
+#         r_imgs = Variable(imgs).cuda()
+#         f_imgs = G(z)
 
-        """ Medium: Use WGAN Loss. """
-        # Label
-        # r_label = torch.ones((bs)).cuda()
-        # f_label = torch.zeros((bs)).cuda()
+#         """ Medium: Use WGAN Loss. """
+#         # Label
+#         # r_label = torch.ones((bs)).cuda()
+#         # f_label = torch.zeros((bs)).cuda()
 
-        # Model forwarding
-        r_logit = D(r_imgs.detach())
-        f_logit = D(f_imgs.detach())
+#         # Model forwarding
+#         r_logit = D(r_imgs.detach())
+#         f_logit = D(f_imgs.detach())
         
-        # Compute the loss for the discriminator.
-        # r_loss = criterion(r_logit, r_label)
-        # f_loss = criterion(f_logit, f_label)
-        # loss_D = (r_loss + f_loss) / 2
+#         # Compute the loss for the discriminator.
+#         # r_loss = criterion(r_logit, r_label)
+#         # f_loss = criterion(f_logit, f_label)
+#         # loss_D = (r_loss + f_loss) / 2
 
-        # WGAN Loss
-        # loss_D = -torch.mean(D(r_imgs)) + torch.mean(D(f_imgs))
-        #SNGAN
-        loss_D = torch.mean(F.relu(1.0 - r_logit)) + torch.mean(F.relu(1.0 + f_logit))
+#         # WGAN Loss
+#         # loss_D = -torch.mean(D(r_imgs)) + torch.mean(D(f_imgs))
+#         #SNGAN
+#         loss_D = torch.mean(F.relu(1.0 - r_logit)) + torch.mean(F.relu(1.0 + f_logit))
 
 
-        # Model backwarding
-        D.zero_grad()
-        loss_D.backward()
+#         # Model backwarding
+#         D.zero_grad()
+#         loss_D.backward()
 
-        # Update the discriminator.
-        opt_D.step()
+#         # Update the discriminator.
+#         opt_D.step()
 
-        """ Medium: Clip weights of discriminator. """
-        # for p in D.parameters():
-        #    p.data.clamp_(-clip_value, clip_value)
+#         """ Medium: Clip weights of discriminator. """
+#         # for p in D.parameters():
+#         #    p.data.clamp_(-clip_value, clip_value)
 
-        # ============================================
-        #  Train G
-        # ============================================
+#         # ============================================
+#         #  Train G
+#         # ============================================
         
-        # Generate some fake images.
-        z = Variable(torch.randn(bs, z_dim)).cuda()
-        f_imgs = G(z)
+#         # Generate some fake images.
+#         z = Variable(torch.randn(bs, z_dim)).cuda()
+#         f_imgs = G(z)
 
-        # Model forwarding
-        f_logit = D(f_imgs)
+#         # Model forwarding
+#         f_logit = D(f_imgs)
             
-        """ Medium: Use WGAN Loss"""
-        # Compute the loss for the generator.
-        # loss_G = criterion(f_logit, r_label)
-        # WGAN Loss
-        # loss_G = -torch.mean(D(f_imgs))
-        loss_G = -torch.mean(f_logit)
-        # Model backwarding
-        G.zero_grad()
-        loss_G.backward()
+#         """ Medium: Use WGAN Loss"""
+#         # Compute the loss for the generator.
+#         # loss_G = criterion(f_logit, r_label)
+#         # WGAN Loss
+#         # loss_G = -torch.mean(D(f_imgs))
+#         loss_G = -torch.mean(f_logit)
+#         # Model backwarding
+#         G.zero_grad()
+#         loss_G.backward()
 
-        # Update the generator.
-        opt_G.step()
+#         # Update the generator.
+#         opt_G.step()
 
-        steps += 1
+#         steps += 1
         
-        # Set the info of the progress bar
-        #   Note that the value of the GAN loss is not directly related to
-        #   the quality of the generated images.
-        progress_bar.set_infos({
-            'Loss_D': round(loss_D.item(), 4),
-            'Loss_G': round(loss_G.item(), 4),
-            'Epoch': e+1,
-            'Step': steps,
-        })
+#         # Set the info of the progress bar
+#         #   Note that the value of the GAN loss is not directly related to
+#         #   the quality of the generated images.
+#         progress_bar.set_infos({
+#             'Loss_D': round(loss_D.item(), 4),
+#             'Loss_G': round(loss_G.item(), 4),
+#             'Epoch': e+1,
+#             'Step': steps,
+#         })
 
-    G.eval()
-    f_imgs_sample = (G(z_sample).data + 1) / 2.0
-    filename = os.path.join(log_dir, f'Epoch_{epoch+1:03d}.jpg')
-    torchvision.utils.save_image(f_imgs_sample, filename, nrow=10)
-    print(f' | Save some samples to {filename}.')
+#     G.eval()
+#     f_imgs_sample = (G(z_sample).data + 1) / 2.0
+#     filename = os.path.join(log_dir, f'Epoch_{epoch+1:03d}.jpg')
+#     torchvision.utils.save_image(f_imgs_sample, filename, nrow=10)
+#     print(f' | Save some samples to {filename}.')
     
-    # Show generated images in the jupyter notebook.
-    # grid_img = torchvision.utils.make_grid(f_imgs_sample.cpu(), nrow=10)
-    # plt.figure(figsize=(10,10))
-    # plt.imshow(grid_img.permute(1, 2, 0))
-    # plt.show()
-    G.train()
+#     # Show generated images in the jupyter notebook.
+#     # grid_img = torchvision.utils.make_grid(f_imgs_sample.cpu(), nrow=10)
+#     # plt.figure(figsize=(10,10))
+#     # plt.imshow(grid_img.permute(1, 2, 0))
+#     # plt.show()
+#     G.train()
 
-    if (e+1) % 5 == 0 or e == 0:
-        # Save the checkpoints.
-        torch.save(G.state_dict(), os.path.join(ckpt_dir, 'G.pth'))
-        torch.save(D.state_dict(), os.path.join(ckpt_dir, 'D.pth'))
+#     if (e+1) % 5 == 0 or e == 0:
+#         # Save the checkpoints.
+#         torch.save(G.state_dict(), os.path.join(ckpt_dir, 'G.pth'))
+#         torch.save(D.state_dict(), os.path.join(ckpt_dir, 'D.pth'))
 
-grid_img = torchvision.utils.make_grid(f_imgs_sample.cpu(), nrow=10)
-plt.figure(figsize=(10,10))
-plt.imshow(grid_img.permute(1, 2, 0))
-plt.show()
+# grid_img = torchvision.utils.make_grid(f_imgs_sample.cpu(), nrow=10)
+# plt.figure(figsize=(10,10))
+# plt.imshow(grid_img.permute(1, 2, 0))
+# plt.show()
 
 G = Generator(z_dim)
 G.load_state_dict(torch.load(os.path.join(ckpt_dir, 'G.pth')))
